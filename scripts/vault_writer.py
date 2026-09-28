@@ -276,6 +276,35 @@ def _wiki_dest(config: dict, frontmatter: dict) -> Path:
 # ── Sort key: MOC last ──────────────────────────────────────────────────────────
 
 
+def write_raw_document(wiki_root: Path, slug: str, kind: str, label: str,
+                       source: str, body: str, today: str, metadata: dict | None = None) -> Path:
+    """Append a raw input exclusively; collisions get new names, never overwrite."""
+    from datetime import date
+    if kind not in WIKI_RAW_KINDS or not is_valid_slug(slug) or not is_valid_slug(label):
+        raise ValueError("invalid raw kind, project slug or label")
+    date.fromisoformat(today)
+    raw_dir = wiki_root / "raw" / kind
+    if not raw_dir.resolve().is_relative_to(wiki_root.resolve()):
+        raise ValueError("raw destination escapes wiki-space")
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    counter = 1
+    while True:
+        stem = f"{today}-{label}" + (f"-{counter}" if counter > 1 else "")
+        dest = raw_dir / f"{stem}.md"
+        fm = dict(metadata or {})
+        fm.update(tags=list(dict.fromkeys([*fm.get("tags", []), "wiki/raw", "wiki/ingested"])),
+                  date=today, source_doc=f"wiki:{slug}:raw:{stem}", note_type="wiki",
+                  wiki_project=slug, wiki_page_type="raw", wiki_status="ingested",
+                  raw_kind=kind, raw_source=source)
+        content = "---\n" + yaml.safe_dump(fm, sort_keys=False, allow_unicode=True).strip() + "\n---\n\n" + body
+        try:
+            with dest.open("x", encoding="utf-8", newline="\n") as stream:
+                stream.write(content)
+            return dest
+        except FileExistsError:
+            counter += 1
+
+
 def _moc_sort_key(md_file: Path) -> tuple[int, str]:
     """Sort key that places MOC and wiki meta-pages after all other notes.
 
@@ -457,7 +486,15 @@ def main() -> None:
         dest_dir.mkdir(parents=True, exist_ok=True)
 
         dest_path = dest_dir / md_file.name
-        shutil.copy2(md_file, dest_path)
+        if note_type == WIKI_NOTE_TYPE and fm.get("wiki_page_type") == "raw":
+            try:
+                with dest_path.open("xb") as stream:
+                    stream.write(content.encode("utf-8"))
+            except FileExistsError:
+                print(f"WIKI_RAW_IMMUTABLE: refusing to replace {dest_path}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            shutil.copy2(md_file, dest_path)
 
         # Track for registry update
         if source_doc:

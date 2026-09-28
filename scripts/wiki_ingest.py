@@ -37,9 +37,15 @@ from urllib.parse import urlparse
 try:
     from scripts.config import PROJECT_ROOT, load_config as _load_config
     from scripts.wiki_models import WIKI_RAW_KINDS, is_valid_slug
+    from scripts.vault_writer import write_raw_document, get_vault_dest
+    from scripts.memory_blocks import split_frontmatter, string_list
+    from scripts.memory_index import auto_update_after_write
 except ModuleNotFoundError:
     from config import PROJECT_ROOT, load_config as _load_config
     from wiki_models import WIKI_RAW_KINDS, is_valid_slug
+    from vault_writer import write_raw_document, get_vault_dest
+    from memory_blocks import split_frontmatter, string_list
+    from memory_index import auto_update_after_write
 
 
 _SLUG_STRIP = re.compile(r"[^a-z0-9-]+")
@@ -116,20 +122,10 @@ def write_raw_note(
     source_id: str,
     body: str,
     today: str,
+    metadata: dict | None = None,
 ) -> Path:
     """Write a single raw note. Returns the destination path."""
-    if kind not in WIKI_RAW_KINDS:
-        raise ValueError(f"raw kind '{kind}' not in {list(WIKI_RAW_KINDS)}")
-    raw_dir = wiki_root / "raw" / kind
-    raw_dir.mkdir(parents=True, exist_ok=True)
-    dest = raw_dir / f"{today}-{label}.md"
-    counter = 2
-    while dest.exists():
-        dest = raw_dir / f"{today}-{label}-{counter}.md"
-        counter += 1
-    fm = _build_raw_frontmatter(slug, dest.stem, source_id, today)
-    dest.write_text(fm + body, encoding="utf-8")
-    return dest
+    return write_raw_document(wiki_root, slug, kind, label, source_id, body, today, metadata)
 
 
 def main() -> int:
@@ -145,6 +141,13 @@ def main() -> int:
         help="raw kind subfolder (default: docs)",
     )
     parser.add_argument("--label", default=None, help="override slug part of filename")
+    parser.add_argument("--mode", choices=("knowledge", "documentation"), default="knowledge",
+                        help="documentation preserves sections and skips automatic LLM compilation")
+    parser.add_argument("--source-id", action="append", default=[], help="source registry ID (repeatable)")
+    parser.add_argument("--version", default=None)
+    parser.add_argument("--provider", default=None)
+    parser.add_argument("--applies-to", action="append", default=[])
+    parser.add_argument("--last-verified", default=None, help="actual ISO verification date, never inferred from ingestion")
     parser.add_argument(
         "--no-compile", action="store_true", help="skip chained wiki_compile.py call"
     )
@@ -162,8 +165,19 @@ def main() -> int:
 
     config = _load_config(strict=True)
     vault_path = Path(config["vault"]["vault_path"]).expanduser()
-    wiki_folder = config.get("wiki", {}).get("wiki_folder", "LLM Wiki")
-    wiki_root = vault_path / wiki_folder / args.slug
+    try:
+        wiki_root = get_vault_dest("wiki", config, {"wiki_project": args.slug, "wiki_page_type": "meta"})
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    metadata = {"ingestion_mode": args.mode}
+    if args.source_id:
+        metadata["sources"] = args.source_id
+    for key in ("version", "provider", "last_verified"):
+        if getattr(args, key):
+            metadata[key] = getattr(args, key)
+    if args.applies_to:
+        metadata["applies_to"] = args.applies_to
 
     if not (wiki_root / "SCHEMA.md").exists():
         print(
@@ -188,7 +202,7 @@ def main() -> int:
         )
         try:
             dest = write_raw_note(
-                wiki_root, args.slug, args.kind, label, args.path, body, today
+                wiki_root, args.slug, args.kind, label, args.path, body, today, metadata
             )
         except (OSError, ValueError) as exc:
             print(f"ERROR: failed to write raw note: {exc}", file=sys.stderr)
@@ -216,13 +230,21 @@ def main() -> int:
                 base_label = f"{args.label}-{_slugify(src.stem)}"
             try:
                 if src.suffix.lower() == ".md":
-                    body = _read_text_file(src)
+                    original_fm, body = split_frontmatter(_read_text_file(src))
                 else:
+                    original_fm = {}
                     body = (
                         f"# {src.name}\n\n"
                         f"_(non-markdown source copied as-is from `{src}`)_\n\n"
                         f"```\n{_read_text_file(src)}\n```\n"
                     )
+                retained = {key: original_fm[key] for key in
+                            ("aliases", "tags", "sources", "source_ids", "version", "provider", "library", "applies_to", "last_verified")
+                            if key in original_fm}
+                retained.update(metadata)
+                for key in ("aliases", "tags", "sources", "source_ids", "applies_to"):
+                    if key in retained:
+                        retained[key] = string_list(retained[key])
                 dest = write_raw_note(
                     wiki_root,
                     args.slug,
@@ -231,6 +253,7 @@ def main() -> int:
                     str(src),
                     body,
                     today,
+                    retained,
                 )
             except (OSError, ValueError) as exc:
                 print(f"ERROR: failed to ingest {src}: {exc}", file=sys.stderr)
@@ -246,7 +269,11 @@ def main() -> int:
         rel = dest.relative_to(wiki_root)
         print(f"OK: {rel_root}/{rel}")
 
-    if args.no_compile:
+    try:
+        auto_update_after_write(config)
+    except Exception as exc:
+        print(f"WARNING: raw saved; memory index refresh skipped: {exc}", file=sys.stderr)
+    if args.no_compile or args.mode == "documentation":
         return 0
 
     compile_script = PROJECT_ROOT / "scripts" / "wiki_compile.py"

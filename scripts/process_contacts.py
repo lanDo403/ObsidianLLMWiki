@@ -370,7 +370,7 @@ def write_contacts_result(
     on_conflict: str = "skip",
 ) -> None:
     """Write contact notes and MOC to vault via staging."""
-    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/dw/staging"))
+    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/obsidian-llmwiki/staging"))
     staging_root.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(tempfile.mkdtemp(prefix="contacts-", dir=staging_root))
 
@@ -611,7 +611,7 @@ def main() -> None:
         print("ERROR: Validation failed:", file=sys.stderr)
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
-        debug_path = Path("/tmp/dw/debug-response.json")
+        debug_path = Path("/tmp/obsidian-llmwiki/debug-response.json")
         debug_path.parent.mkdir(parents=True, exist_ok=True)
         debug_path.write_text(raw_response, encoding="utf-8")
         print(f"  Raw response saved to: {debug_path}", file=sys.stderr)

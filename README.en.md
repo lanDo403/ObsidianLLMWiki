@@ -1,6 +1,6 @@
 <div align="center">
 
-# ObsidianDataWeave
+# ObsidianLLMWIKI
 
 **Full NotebookLM control from Claude Code / Codex, .docx import with Zettelkasten atomization, and a compiled LLM Wiki layer that grows by explicit merge, plus a zero-dependency FTS5 full-text memory over the whole vault — all programmatic, all into your Obsidian vault.**
 
@@ -18,11 +18,40 @@
 
 </div>
 
+## Block memory in this fork
+
+Use repository code first for local tasks, then local memory for domain knowledge,
+then official docs when missing/stale. Search is block-level SQLite FTS5 with compact
+metadata and legacy JSON keys. Default scope auto prefers canonical Wiki, falling
+back to notes; raw requires --scope raw/all and system metadata is excluded.
+--raw still means FTS syntax. Aliases/tags are searchable; --version 4 matches 4.x.
+
+```bash
+python scripts/migrate.py
+python scripts/memory_index.py search "bybit orderbook reconnect" --json
+python scripts/memory_index.py read "<block_key>"
+python scripts/memory_index.py context "bybit orderbook reconnect" --budget-tokens 1200
+python scripts/source_watcher.py check
+python scripts/wiki_ingest.py demo api.md --mode documentation --source-id example-api-v5 --version V5
+```
+
+Context deduplicates and budgets the entire output using ceil(UTF-8 bytes / 3),
+not a model-specific tokenizer. Registry/provenance tracks sources, version,
+applies_to, last_verified and freshness. Watcher uses conditional HTTP/hash/diff
+without LLM or automatic Wiki edits. Documentation ingestion preserves headings
+and skips compilation. A local semantic provider interface is optional and disabled;
+no embedding backend ships. Existing import/compile/update commands remain available.
+
+See [retrieval](rules/memory_retrieval.md), [sources](rules/source_registry.md),
+[validation](docs/VALIDATION.md), [tasks](TASKS.md) and [decisions](DECISIONS.md).
+Regression benchmark: `python benchmarks/retrieval_benchmark.py` (synthetic, no LLM).
+Real tests on Linux and with Claude have not been conducted.
+
 ---
 
 ## What is this
 
-ObsidianDataWeave turns Claude Code and Codex into a full remote control for NotebookLM and your Obsidian vault. Run deep research, manage sources, pull notes from notebooks — all through a single natural-language command. It also imports `.docx` from Google Drive and atomizes them into Zettelkasten notes with MOC, tags, and wikilinks. On top of all that — an isolated **LLM Wiki** layer: a Karpathy-style compiled knowledge base that grows by explicit merge, never recomputed on every query. Search across all of it is the **FTS5 memory**: a local full-text index of the whole vault (notes, wiki, NotebookLM imports) that refreshes itself after every write.
+ObsidianLLMWIKI turns Claude Code and Codex into a full remote control for NotebookLM and your Obsidian vault. Run deep research, manage sources, pull notes from notebooks — all through a single natural-language command. It also imports `.docx` from Google Drive and atomizes them into Zettelkasten notes with MOC, tags, and wikilinks. On top of all that — an isolated **LLM Wiki** layer: a Karpathy-style compiled knowledge base that grows by explicit merge, never recomputed on every query. Search across all of it is the **FTS5 memory**: a local full-text index of the whole vault (notes, wiki, NotebookLM imports) that refreshes itself after every write.
 
 ### What you can do with NotebookLM
 
@@ -50,21 +79,21 @@ All NotebookLM interaction goes through the Python API (`notebooklm-py`), not th
 ## Install
 
 ```bash
-git clone https://github.com/howdeploy/ObsidianDataWeave.git
-cd ObsidianDataWeave
+git clone https://github.com/lanDo403/ObsidianLLMWIKI.git
+cd ObsidianLLMWIKI
 bash install.sh --vault-path "/path/to/your/obsidian/vault"
 ```
 
 Or copy this prompt into Claude Code or Codex — it handles everything:
 
 ```
-Clone https://github.com/howdeploy/ObsidianDataWeave.git and run bash install.sh --vault-path "/path/to/vault" in the cloned directory.
+Clone https://github.com/lanDo403/ObsidianLLMWIKI.git and run bash install.sh --vault-path "/path/to/vault" in the cloned directory.
 ```
 
 The installer will:
 - Check Python 3.10+ and install dependencies (`python-docx`, `pyyaml`)
 - Create `config.toml` with your vault path
-- Register the skill globally in `~/.claude/skills/obsidian-dataweave/`
+- Register the skill globally in `~/.claude/skills/obsidian-llmwiki/`
 - Add a helper block to `~/.claude/CLAUDE.md`
 
 After installation the skill works **from any directory**.
@@ -72,7 +101,7 @@ After installation the skill works **from any directory**.
 ## Upgrade
 
 ```bash
-cd ObsidianDataWeave && git pull && bash install.sh
+cd ObsidianLLMWIKI && git pull && bash install.sh
 ```
 
 The installer is idempotent: skill symlinks update themselves, `migrate.py`
@@ -128,7 +157,7 @@ More examples:
 
 ## NotebookLM: full programmatic control
 
-ObsidianDataWeave gives Claude Code / Codex full programmatic control over NotebookLM. Instead of manual work in the web UI, you tell the agent what you need and it runs research, manages sources, pulls notes, and atomizes them into Obsidian. The entire API layer uses `notebooklm-py` as a library (not the CLI), which guarantees one-shot behavior with no retry duplication.
+ObsidianLLMWIKI gives Claude Code / Codex full programmatic control over NotebookLM. Instead of manual work in the web UI, you tell the agent what you need and it runs research, manages sources, pulls notes, and atomizes them into Obsidian. The entire API layer uses `notebooklm-py` as a library (not the CLI), which guarantees one-shot behavior with no retry duplication.
 
 ### First-time login
 
@@ -148,7 +177,7 @@ The script installs `notebooklm-py[browser]` and the Playwright Chromium browser
 2. **Open a separate terminal window** and run:
 
 ```bash
-cd /path/to/ObsidianDataWeave
+cd /path/to/ObsidianLLMWIKI
 .venv/bin/notebooklm login
 ```
 
@@ -274,6 +303,12 @@ The `templates/` directory contains a starter vault structure:
 
 ## Configuration
 
+The project slug is `obsidian-llmwiki`, used for the skill and cache/staging
+directories. Select the backend with `OBSIDIAN_LLMWIKI_BACKEND` (`claude` or
+`codex`). When adopting the new name, update this variable and the skill
+registration. Existing external directories are not automatically removed;
+explicit `db_dir`, `state_dir` and `staging_dir` values remain authoritative.
+
 `config.toml` (created during installation, never committed):
 
 ```toml
@@ -285,7 +320,7 @@ source_folder = "Sources"                       # source document references
 
 [rclone]
 remote = "gdrive:"                              # rclone remote name
-staging_dir = "/tmp/dw/staging"                # temporary staging area
+staging_dir = "/tmp/obsidian-llmwiki/staging"                # temporary staging area
 ```
 
 ## Requirements
@@ -312,7 +347,7 @@ staging_dir = "/tmp/dw/staging"                # temporary staging area
 ## Project structure
 
 ```
-ObsidianDataWeave/
+ObsidianLLMWIKI/
 ├── scripts/
 │   ├── process.py            # Main pipeline (.docx → vault)
 │   ├── process_note.py       # Personal note processing (enrich/atomize)

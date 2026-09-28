@@ -26,4 +26,4 @@ This is not just aesthetics. The link between two atomic notes is a claim — yo
 - Add 1-3 wikilinks to related concepts you have already captured
 - Tag with the domain taxonomy from `tags.yaml` (e.g., `productivity/zettelkasten`)
 
-This note was generated from `Example Document.docx` as a demonstration of the v1 frontmatter schema used by ObsidianDataWeave.
+This note was generated from `Example Document.docx` as a demonstration of the v1 frontmatter schema used by ObsidianLLMWIKI.

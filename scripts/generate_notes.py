@@ -2,7 +2,7 @@
 
 Usage:
     python3 scripts/generate_notes.py <atom-plan.json>
-    python3 scripts/generate_notes.py <atom-plan.json> --staging-dir /tmp/dw/staging/run-123
+    python3 scripts/generate_notes.py <atom-plan.json> --staging-dir /tmp/obsidian-llmwiki/staging/run-123
 
 Prints staging directory path to stdout (for process.py chaining).
 All diagnostics go to stderr.
@@ -133,7 +133,7 @@ def main() -> None:
 
     # Load config and derive staging dir
     config = load_config()
-    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/dw/staging"))
+    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/obsidian-llmwiki/staging"))
     staging_root.mkdir(parents=True, exist_ok=True)
     if args.staging_dir:
         staging_dir = Path(args.staging_dir)

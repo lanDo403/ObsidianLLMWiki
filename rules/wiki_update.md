@@ -9,6 +9,11 @@ This file is loaded **in addition to** `wiki_compile.md`. The full
 ChangeSet contract there still applies. The rules below sharpen behavior
 for the incremental case.
 
+Source watcher diffs are evidence artifacts, not automatic update commands. Ingest
+only the relevant changed evidence before a targeted update. Preserve source IDs,
+applicable version and legacy raw citations; never infer last_verified from a
+download or compilation timestamp. Follow rules/source_registry.md for freshness.
+
 ## Mindset
 
 You are **extending**, not rebuilding. Treat the snapshot as the current

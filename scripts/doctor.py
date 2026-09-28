@@ -1,4 +1,4 @@
-"""doctor.py — Validate local setup for ObsidianDataWeave."""
+"""doctor.py — Validate local setup for ObsidianLLMWIKI."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def check_notebooklm_auth() -> None:
 def main() -> None:
     ok = True
 
-    print("ObsidianDataWeave doctor")
+    print("ObsidianLLMWIKI doctor")
     print(f"Project root: {PROJECT_ROOT}")
 
     ok &= check_path("config.example.toml", PROJECT_ROOT / "config.example.toml")

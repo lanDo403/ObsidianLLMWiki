@@ -16,7 +16,7 @@ def detect_backend(explicit: str | None = None) -> str:
 
     Precedence:
     1. Explicit CLI/config value if not "auto"
-    2. Environment override OBSIDIAN_DATAWEAVE_BACKEND
+    2. Environment override OBSIDIAN_LLMWIKI_BACKEND
     3. Codex markers
     4. Claude markers
     5. Fallback to claude
@@ -24,7 +24,7 @@ def detect_backend(explicit: str | None = None) -> str:
     if explicit and explicit != "auto":
         return explicit
 
-    env_override = os.environ.get("OBSIDIAN_DATAWEAVE_BACKEND")
+    env_override = os.environ.get("OBSIDIAN_LLMWIKI_BACKEND")
     if env_override in {"claude", "codex"}:
         return env_override
 
@@ -39,7 +39,7 @@ def detect_backend(explicit: str | None = None) -> str:
 
 def write_debug_prompt(prompt: str, prefix: str) -> Path:
     """Persist a prompt for manual inspection or replay."""
-    debug_dir = Path("/tmp/dw/debug-prompts")
+    debug_dir = Path("/tmp/obsidian-llmwiki/debug-prompts")
     debug_dir.mkdir(parents=True, exist_ok=True)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     path = debug_dir / f"{prefix}-{timestamp}.prompt.md"

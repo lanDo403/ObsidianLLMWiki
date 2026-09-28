@@ -1,6 +1,6 @@
 # Templates
 
-This directory contains a starter Obsidian vault structure for use with ObsidianDataWeave.
+This directory contains a starter Obsidian vault structure for use with ObsidianLLMWIKI.
 
 ## How to use
 

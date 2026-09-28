@@ -28,6 +28,7 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import subprocess
@@ -43,6 +44,7 @@ try:
     from scripts.config import PROJECT_ROOT, load_config as _load_config
     from scripts.rewrite_backend import call_rewriter, write_debug_prompt
     from scripts.vault_writer import get_vault_dest
+    from scripts.memory_blocks import string_list
     from scripts.wiki_models import (
         ChangeSet,
         ChangeSetShapeError,
@@ -59,6 +61,7 @@ except ModuleNotFoundError:
     from config import PROJECT_ROOT, load_config as _load_config
     from rewrite_backend import call_rewriter, write_debug_prompt
     from vault_writer import get_vault_dest
+    from memory_blocks import string_list
     from wiki_models import (
         ChangeSet,
         ChangeSetShapeError,
@@ -78,7 +81,7 @@ RULES_DIR = PROJECT_ROOT / "rules"
 WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 FENCED_CODE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
 INLINE_CODE_RE = re.compile(r"`[^`\n]+`")
-DEBUG_RESPONSE_PATH = Path("/tmp/dw/debug-response.json")
+DEBUG_RESPONSE_PATH = Path("/tmp/obsidian-llmwiki/debug-response.json")
 
 
 _OUTER_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```\s*\Z")
@@ -143,7 +146,7 @@ def snapshot_wiki_space(root: Path) -> dict[str, Any]:
     pages: dict[str, dict[str, Any]] = {}
     existing_links: dict[str, list[str]] = {}
     for md in root.rglob("*.md"):
-        rel = str(md.relative_to(root))
+        rel = md.relative_to(root).as_posix()
         try:
             text = md.read_text(encoding="utf-8")
         except OSError:
@@ -175,6 +178,10 @@ def _is_ingested(fm: dict[str, Any]) -> bool:
     return fm.get("wiki_status") == "ingested"
 
 
+def _raw_hash(page: dict) -> str:
+    return hashlib.sha256(json.dumps(page, sort_keys=True, default=str, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
 def select_raw_inputs(
     snapshot: dict[str, Any],
     *,
@@ -189,10 +196,14 @@ def select_raw_inputs(
         ]
     else:
         matched = [rel for rel in snapshot["pages"] if rel.startswith("raw/")]
+        matched = [rel for rel in matched
+                   if snapshot["pages"][rel]["frontmatter"].get("ingestion_mode") != "documentation"]
         if since_last_compile:
+            consumed = snapshot["pages"].get("log.md", {}).get("frontmatter", {}).get("consumed_raw_hashes", {})
             matched = [
                 rel for rel in matched
                 if _is_ingested(snapshot["pages"][rel]["frontmatter"])
+                and consumed.get(rel) != _raw_hash(snapshot["pages"][rel])
             ]
 
     out = []
@@ -250,12 +261,14 @@ def assemble_prompt(
             "frontmatter": {
                 k: page["frontmatter"].get(k)
                 for k in ("note_type", "wiki_project", "wiki_page_type", "wiki_status",
-                          "date", "source_doc", "confidence", "sources", "related")
+                          "date", "source_doc", "confidence", "sources", "related",
+                          "aliases", "provider", "library", "version", "applies_to", "last_verified")
                 if k in page["frontmatter"]
             },
             "body": page["body"],
         }
         for rel, page in snapshot["pages"].items()
+        if not rel.startswith("raw/")
     }
 
     # default=str — YAML loads bare `date:` as datetime.date, which json
@@ -266,7 +279,8 @@ def assemble_prompt(
             "mode": snapshot.get("mode", mode),
             "log_tail": snapshot.get("log_tail", ""),
             "pages": snapshot_pages,
-            "existing_links": snapshot.get("existing_links", {}),
+            "existing_links": {p: links for p, links in snapshot.get("existing_links", {}).items()
+                               if not p.startswith("raw/")},
         },
         ensure_ascii=False,
         indent=2,
@@ -359,6 +373,19 @@ def validate_changeset(cs: ChangeSet, snapshot: dict[str, Any]) -> None:
 
     errors: list[str] = []
 
+    # Raw and frozen schema never belong in a generated ChangeSet.
+    for page in [*cs.creates, *cs.updates]:
+        path = Path(page.rel_path)
+        if (path.is_absolute() or ".." in path.parts or "\\" in page.rel_path
+                or path.suffix != ".md" or page.rel_path.startswith("raw/")
+                or page.frontmatter.get("wiki_page_type") == "raw"
+                or path.name == "SCHEMA.md"):
+            errors.append(f"{page.rel_path}: WIKI_WRITE_FORBIDDEN: immutable or unsafe destination")
+    for rename in cs.renames:
+        if any(str(value).replace("\\", "/").startswith("raw/") or str(value).endswith("SCHEMA.md")
+               for value in rename.values()):
+            errors.append("WIKI_WRITE_FORBIDDEN: cannot rename immutable raw or schema")
+
     # 1. Frontmatter shape on every create / update
     for page in cs.creates:
         _check_frontmatter(page.rel_path, page.frontmatter, cs.project, errors)
@@ -373,7 +400,7 @@ def validate_changeset(cs: ChangeSet, snapshot: dict[str, Any]) -> None:
     for page in cs.creates:
         try:
             dest_dir = get_vault_dest(WIKI_NOTE_TYPE, routing_config, page.frontmatter)
-            dest_rel = str((dest_dir / Path(page.rel_path).name).relative_to(routing_root))
+            dest_rel = (dest_dir / Path(page.rel_path).name).relative_to(routing_root).as_posix()
         except ValueError as exc:
             errors.append(f"creates[{page.rel_path}]: {exc}")
             continue
@@ -384,6 +411,13 @@ def validate_changeset(cs: ChangeSet, snapshot: dict[str, Any]) -> None:
                 "use updates[] for existing pages"
             )
     for upd in cs.updates:
+        try:
+            dest_dir = get_vault_dest(WIKI_NOTE_TYPE, routing_config, upd.frontmatter)
+            dest_rel = (dest_dir / Path(upd.rel_path).name).relative_to(routing_root).as_posix()
+            if dest_rel != upd.rel_path:
+                errors.append(f"updates[{upd.rel_path}]: WIKI_WRITE_FORBIDDEN: routing points to {dest_rel}")
+        except ValueError as exc:
+            errors.append(f"updates[{upd.rel_path}]: {exc}")
         if upd.rel_path not in snapshot["pages"]:
             errors.append(
                 f"updates[{upd.rel_path}]: page does not exist in snapshot — "
@@ -478,11 +512,40 @@ def materialize_to_staging(cs: ChangeSet, staging_dir: Path) -> None:
     for page in cs.creates:
         dest = staging_dir / page.rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(_render_page(page.frontmatter, page.body), encoding="utf-8")
+        fm = dict(page.frontmatter)
+        if page.sources:
+            fm["sources"] = list(dict.fromkeys([*string_list(fm.get("sources")), *page.sources]))
+        dest.write_text(_render_page(fm, page.body), encoding="utf-8")
     for upd in cs.updates:
         dest = staging_dir / upd.rel_path
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(_render_page(upd.frontmatter, upd.body), encoding="utf-8")
+        fm = dict(upd.frontmatter)
+        if upd.sources:
+            fm["sources"] = list(dict.fromkeys([*string_list(fm.get("sources")), *upd.sources]))
+        dest.write_text(_render_page(fm, upd.body), encoding="utf-8")
+
+
+def carry_provenance(cs: ChangeSet, snapshot: dict) -> None:
+    """Keep known provenance and map cited raw paths to their registry source IDs.
+
+    A compile timestamp is not a verification timestamp. No new verification
+    date is fabricated; changed prose without explicit verification becomes unknown.
+    """
+    for page in [*cs.creates, *cs.updates]:
+        old = snapshot["pages"].get(page.rel_path, {})
+        old_fm = old.get("frontmatter", {})
+        for key in ("aliases", "provider", "library", "version", "applies_to"):
+            if key not in page.frontmatter and key in old_fm:
+                page.frontmatter[key] = old_fm[key]
+        if page.body == old.get("body") and "last_verified" not in page.frontmatter and "last_verified" in old_fm:
+            page.frontmatter["last_verified"] = old_fm["last_verified"]
+        sources = list(dict.fromkeys([*string_list(old_fm.get("sources")),
+                                    *string_list(page.frontmatter.get("sources")), *page.sources]))
+        for source in list(sources):
+            fm = snapshot["pages"].get(source, {}).get("frontmatter", {})
+            sources.extend(string_list(fm.get("sources")) + string_list(fm.get("source_ids")))
+        if sources:
+            page.frontmatter["sources"] = list(dict.fromkeys(sources))
 
 
 # ── Index regeneration ──────────────────────────────────────────────────────
@@ -708,6 +771,12 @@ def _append_log_to_staging(
             "wiki_status": "stable",
         }
     fm["date"] = today
+    consumed = dict(fm.get("consumed_raw_hashes", {}))
+    for rel in cs.log_entry.raws_consumed:
+        if rel.startswith("raw/") and rel in snapshot["pages"]:
+            consumed[rel] = _raw_hash(snapshot["pages"][rel])
+    if consumed:
+        fm["consumed_raw_hashes"] = consumed
     dest = staging_dir / "log.md"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(_render_page(fm, body), encoding="utf-8")
@@ -797,7 +866,7 @@ def main() -> int:
     mode = snapshot.get("mode", "project")
 
     if args.regenerate_index_only:
-        staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/dw/staging"))
+        staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/obsidian-llmwiki/staging"))
         staging_root.mkdir(parents=True, exist_ok=True)
         staging_dir = Path(tempfile.mkdtemp(prefix=f"wiki-{args.slug}-idx-", dir=staging_root))
         regenerate_index_to_staging(staging_dir, args.slug, snapshot, cs=None, mode=mode)
@@ -884,6 +953,7 @@ def main() -> int:
         return 3
 
     try:
+        carry_provenance(cs, snapshot)
         validate_changeset(cs, snapshot)
     except ValidationError as exc:
         DEBUG_RESPONSE_PATH.write_text(response, encoding="utf-8")
@@ -891,7 +961,7 @@ def main() -> int:
         return exc.exit_code
 
     # Build staging dir and materialize.
-    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/dw/staging"))
+    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/obsidian-llmwiki/staging"))
     staging_root.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(tempfile.mkdtemp(prefix=f"wiki-{args.slug}-", dir=staging_root))
 

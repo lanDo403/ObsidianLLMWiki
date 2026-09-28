@@ -62,7 +62,7 @@ def create_run_staging_dir(base_dir: str, name_hint: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Full ObsidianDataWeave pipeline for NotebookLM: "
+            "Full ObsidianLLMWIKI pipeline for NotebookLM: "
             "fetch_notebook.py -> atomize.py -> generate_notes.py -> vault_writer.py"
         )
     )

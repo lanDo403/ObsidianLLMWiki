@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# install.sh — one-command setup for ObsidianDataWeave
+# install.sh — one-command setup for ObsidianLLMWIKI
 #
 # One-liner install:
-#   git clone https://github.com/<user>/ObsidianDataWeave && cd ObsidianDataWeave && bash install.sh --vault-path "/path/to/vault"
+#   git clone https://github.com/lanDo403/ObsidianLLMWIKI && cd ObsidianLLMWIKI && bash install.sh --vault-path "/path/to/vault"
 #
 # Claude Code prompt:
-#   "Clone github.com/<user>/ObsidianDataWeave and run install.sh with my vault at /path/to/vault"
+#   "Clone github.com/lanDo403/ObsidianLLMWIKI and run install.sh with my vault at /path/to/vault"
 
 set -euo pipefail
 
@@ -13,7 +13,7 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODE="claude"
 VAULT_PATH=""
 RCLONE_REMOTE="gdrive:"
-SKILL_DIR="${HOME}/.claude/skills/obsidian-dataweave"
+SKILL_DIR="${HOME}/.claude/skills/obsidian-llmwiki"
 
 usage() {
     cat <<'EOF'
@@ -126,6 +126,20 @@ register_global_skill() {
     fi
     ln -sf "${REPO_DIR}/SKILL.md" "${SKILL_DIR}/SKILL.md"
 
+    # Preserve the relative links used by the current shared skill. A repository
+    # link also locates scripts/config when invoked from a different project.
+    # Never replace an unrelated real file/directory at these new destinations.
+    local name target
+    for name in AGENTS.md rules docs repository; do
+        target="${REPO_DIR}/${name}"
+        [[ "$name" == "repository" ]] && target="${REPO_DIR}"
+        if [[ -e "${SKILL_DIR}/${name}" && ! -L "${SKILL_DIR}/${name}" ]]; then
+            echo "ERROR: refusing to replace non-symlink ${SKILL_DIR}/${name}" >&2
+            return 1
+        fi
+        ln -sfn "$target" "${SKILL_DIR}/${name}"
+    done
+
     # Symlink references (auto-update on git pull)
     ln -sf "${REPO_DIR}/rules/atomization.md" "${SKILL_DIR}/references/atomization-rules.md"
     ln -sf "${REPO_DIR}/rules/taxonomy.md" "${SKILL_DIR}/references/taxonomy-rules.md"
@@ -144,15 +158,15 @@ register_claude_md() {
     touch "$claude_md"
 
     # Remove old block if present, then add new one
-    if grep -qF "## ObsidianDataWeave" "$claude_md"; then
-        # Remove existing block (from ## ObsidianDataWeave to next ## or EOF)
+    if grep -qF "## ObsidianLLMWIKI" "$claude_md"; then
+        # Remove existing block (from ## ObsidianLLMWIKI to next ## or EOF)
         python3 -c "
 import re, sys
 with open('$claude_md', 'r') as f:
     content = f.read()
-# Remove the ObsidianDataWeave section
+# Remove the ObsidianLLMWIKI section
 content = re.sub(
-    r'\n*## ObsidianDataWeave[^\n]*\n.*?(?=\n## |\Z)',
+    r'\n*## ObsidianLLMWIKI[^\n]*\n.*?(?=\n## |\Z)',
     '',
     content,
     flags=re.DOTALL
@@ -160,23 +174,28 @@ content = re.sub(
 with open('$claude_md', 'w') as f:
     f.write(content.strip() + '\n')
 "
-        echo "Removed old ObsidianDataWeave block."
+        echo "Removed old ObsidianLLMWIKI block."
     fi
 
     cat >> "$claude_md" <<CLAUDE_EOF
 
-## ObsidianDataWeave
+## ObsidianLLMWIKI
 
-Obsidian note processing: enrich/atomize by Zettelkasten + .docx import.
+Obsidian Wiki memory: block search/read/context, source checks, Wiki updates,
+note processing and .docx/NotebookLM import. Load the skill for these tasks.
 
-- **Skill:** \`~/.claude/skills/obsidian-dataweave/SKILL.md\`
+- **Skill:** \`~/.claude/skills/obsidian-llmwiki/SKILL.md\`
 - **Repo:** \`${REPO_DIR}\`
+- Run the skill's Python commands from this repository using its virtualenv,
+  even when the current coding task belongs to a different repository.
 
 ### Trigger phrases
 - "process note X" / "обработай заметку X"
 - "enrich note X" / "atomize note X"
 - "import document X.docx" / "обработай документ X.docx"
 - "zettelkasten rules" / "правила заметок"
+- "search the vault" / "что мы знаем про" / "найди в вики"
+- "compile wiki" / "update wiki" / "проверь источники"
 CLAUDE_EOF
 
     echo "Registered in ${claude_md}"

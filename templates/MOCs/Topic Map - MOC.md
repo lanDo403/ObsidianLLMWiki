@@ -9,7 +9,7 @@ note_type: moc
 
 # Topic Map: Personal Knowledge Management — MOC
 
-A Map of Content (MOC) is a navigation hub — a note whose job is to collect links to related atomic notes, not to hold content itself. This MOC covers the core concepts and methodology of PKM as implemented in ObsidianDataWeave.
+A Map of Content (MOC) is a navigation hub — a note whose job is to collect links to related atomic notes, not to hold content itself. This MOC covers the core concepts and methodology of PKM as implemented in ObsidianLLMWIKI.
 
 ## Core Concepts
 
@@ -21,9 +21,9 @@ A Map of Content (MOC) is a navigation hub — a note whose job is to collect li
 ## Methodology
 
 - [[Zettelkasten Slip-box Origins]] — Niklas Luhmann's card index system and why it works at scale
-- [[Two-Level Hierarchy: MOC and Atomic Notes]] — Why ObsidianDataWeave uses exactly two levels (no sub-MOCs)
+- [[Two-Level Hierarchy: MOC and Atomic Notes]] — Why ObsidianLLMWIKI uses exactly two levels (no sub-MOCs)
 - [[Wikilink as Semantic Assertion]] — A link between notes is a claim about conceptual relationship
-- [[Source Document as Unit of Work]] — One .docx → one MOC + N atomic notes per ObsidianDataWeave pipeline
+- [[Source Document as Unit of Work]] — One .docx → one MOC + N atomic notes per ObsidianLLMWIKI pipeline
 
 ---
 

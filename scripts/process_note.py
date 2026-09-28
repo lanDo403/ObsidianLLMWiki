@@ -392,7 +392,7 @@ def write_atomize_result(
     on_conflict: str = "skip",
 ) -> None:
     """Write atomized notes to vault via staging → generate → vault_writer flow."""
-    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/dw/staging"))
+    staging_root = Path(config.get("rclone", {}).get("staging_dir", "/tmp/obsidian-llmwiki/staging"))
     staging_root.mkdir(parents=True, exist_ok=True)
     staging_dir = Path(tempfile.mkdtemp(prefix="personal-", dir=staging_root))
 
@@ -603,7 +603,7 @@ def main() -> None:
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         # Write raw response for debugging
-        debug_path = Path("/tmp/dw/debug-response.json")
+        debug_path = Path("/tmp/obsidian-llmwiki/debug-response.json")
         debug_path.parent.mkdir(parents=True, exist_ok=True)
         debug_path.write_text(raw_response, encoding="utf-8")
         print(f"  Raw response saved to: {debug_path}", file=sys.stderr)

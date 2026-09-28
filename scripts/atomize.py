@@ -390,7 +390,7 @@ def main() -> None:
 
     # Load config and derive staging dir
     config = load_config()
-    staging_dir = Path(config.get("rclone", {}).get("staging_dir", "/tmp/dw/staging"))
+    staging_dir = Path(config.get("rclone", {}).get("staging_dir", "/tmp/obsidian-llmwiki/staging"))
 
     # Load supporting artifacts
     tags = load_tags()

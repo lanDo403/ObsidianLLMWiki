@@ -16,10 +16,10 @@ The prompt assembles, in order:
 2. This file (`wiki_compile.md`) — the ChangeSet shape and rules below.
 3. `wiki_tags.yaml` — the allowed wiki-contour tag whitelist.
 4. **Snapshot** of existing wiki-space as JSON:
-   - SCHEMA, log tail, every existing page (rel_path, frontmatter, body)
+   - SCHEMA, log tail, existing non-raw pages (rel_path, frontmatter, body)
    - `existing_links[<rel_path>]` — the set of `[[wikilink]]` targets
      each page already carries on disk
-5. **Raw batch** as JSON: each raw input's filename, kind, and full body
+5. **Selected raw batch**, once: each input's filename, kind, metadata and body
 6. The compile mode (project or corpus) and current ISO date
 
 ## Output: a single ChangeSet JSON object
@@ -153,7 +153,20 @@ more core pages, plus zero or more new entity/concept pages.
 In **corpus mode**, only entity/concept/comparison/query pages grow. Do
 not invent core pages.
 
-## When raw is empty
+## Provenance and documentation
+
+Keep sources, applicable version/provider and aliases on existing pages. Cite raw
+paths and known source-registry IDs. ChangeSet.sources is persisted as frontmatter.
+Only use a last_verified date supported by actual verification; compilation itself
+does not establish freshness. A changed page without explicit last_verified becomes
+unknown. Raw paths are immutable and cannot be generated or updated by a ChangeSet.
+
+Documentation-mode inputs are selected only by explicit --raw-only/wiki_update.
+Promote durable concepts (authentication, recovery, retry semantics), not one page
+per API endpoint. Unselected raw never belongs in the snapshot prompt. Successful
+compile records consumed input hashes in log metadata, leaving raw untouched.
+
+## Empty batch
 
 If the raw batch is empty (a compile run that only touches existing
 pages — e.g. dedup, link cleanup), `creates[]`, `updates[]`,

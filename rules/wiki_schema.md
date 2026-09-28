@@ -92,9 +92,15 @@ Optional:
 
 - `confidence`: `high | medium | low` — pages tagged `low` must open with a
   `> [!warning]` callout that names the gap
-- `sources`: list of `raw/...md` paths the page draws on
+- `sources`: list of source-registry IDs and/or legacy `raw/...md` evidence paths
+- `aliases`: alternate terminology indexed locally; no LLM query expansion
+- `provider` / `library`, `version`, `applies_to`: applicability metadata
+- `last_verified`: actual ISO verification timestamp/date; never the compile date
+  by default. Missing version/freshness remains unknown. See source_registry.md.
 - `related`: list of slugs (NOT `[[wikilinks]]`) for cross-reference
 - `last_compiled`: ISO timestamp of last compile that touched the page
+- `consumed_raw_hashes`: generated log.md bookkeeping for previously compiled raw;
+  never place it on ordinary knowledge pages or mutate raw to mark it processed
 
 ## Wikilink rules
 

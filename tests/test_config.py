@@ -41,7 +41,7 @@ def test_registry_path_under_project():
 
 
 def test_default_staging_dir():
-    assert DEFAULT_STAGING_DIR == "/tmp/dw/staging"
+    assert DEFAULT_STAGING_DIR == "/tmp/obsidian-llmwiki/staging"
 
 
 @requires_toml

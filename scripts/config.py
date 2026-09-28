@@ -1,4 +1,4 @@
-"""config.py — Shared configuration loader for ObsidianDataWeave scripts.
+"""config.py — Shared configuration loader for ObsidianLLMWIKI scripts.
 
 Single source of truth for:
 - tomllib import (stdlib 3.11+ / tomli fallback)
@@ -24,7 +24,7 @@ except ImportError:
 # ── Path constants ────────────────────────────────────────────────────────────
 
 PROJECT_ROOT = Path(__file__).parent.parent
-DEFAULT_STAGING_DIR = "/tmp/dw/staging"
+DEFAULT_STAGING_DIR = "/tmp/obsidian-llmwiki/staging"
 REGISTRY_PATH = PROJECT_ROOT / "processed.json"
 
 # ── Config loader ─────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-"""Tests for pure functions across ObsidianDataWeave scripts."""
+"""Tests for pure functions across ObsidianLLMWIKI scripts."""
 
 import json
 from pathlib import Path

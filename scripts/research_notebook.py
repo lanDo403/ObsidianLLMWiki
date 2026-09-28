@@ -448,7 +448,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="research_notebook.py",
         description=(
-            "Safe NotebookLM research driver for ObsidianDataWeave. "
+            "Safe NotebookLM research driver for ObsidianLLMWIKI. "
             "Bypasses the upstream `notebooklm source add-research --import-all` "
             "CLI retry loop (teng-lin/notebooklm-py#241) by calling the "
             "`notebooklm-py` Python API directly. Also provides a dedupe "

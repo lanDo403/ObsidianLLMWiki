@@ -1,4 +1,4 @@
-"""migrate.py — idempotent upgrade step for existing ObsidianDataWeave installs.
+"""migrate.py — idempotent upgrade step for existing ObsidianLLMWIKI installs.
 
 Run after every `git pull` (install.sh calls it automatically):
 
@@ -19,10 +19,13 @@ Nothing in the vault is ever touched; the legacy Smart Connections cache
 from __future__ import annotations
 
 import sys
+import re
+import os
+import tempfile
 from pathlib import Path
 
 try:
-    from scripts.config import PROJECT_ROOT, load_config
+    from scripts.config import PROJECT_ROOT, load_config, tomllib
     from scripts.memory_index import (
         db_path_for_vault,
         fts5_available,
@@ -31,7 +34,7 @@ try:
         vault_path_from,
     )
 except ModuleNotFoundError:
-    from config import PROJECT_ROOT, load_config
+    from config import PROJECT_ROOT, load_config, tomllib
     from memory_index import (
         db_path_for_vault,
         fts5_available,
@@ -46,7 +49,7 @@ MEMORY_SECTION = """
 # Smart Connections embedding layer). Zero dependencies: stdlib sqlite3.
 enabled = true
 
-# Where the SQLite index lives. Empty → ~/.cache/obsidian-dataweave/
+# Where the SQLite index lives. Empty → ~/.cache/obsidian-llmwiki/
 # (one db per vault, named <vault-slug>-<hash>.db). The index is always
 # OUTSIDE the vault so vault sync (gdrive/iCloud/...) never touches it.
 db_dir = ""
@@ -63,18 +66,59 @@ auto_update = true
 
 
 def ensure_memory_section(config_path: Path) -> str:
-    """Append the [memory] block to config.toml if it is missing.
+    """Insert only absent defaults; preserve user values, comments and line endings.
 
-    Returns one of: "added", "present", "no-config".
+    Inline tables are left untouched (runtime defaults still apply), because TOML
+    prohibits extending them. No config is created for an unconfigured install.
     """
     if not config_path.exists():
         return "no-config"
-    text = config_path.read_text(encoding="utf-8")
-    if "[memory]" in text:
+    original = config_path.read_bytes().decode("utf-8")
+    parsed = tomllib.loads(original)
+    text = original
+    newline = "\r\n" if "\r\n" in original else "\n"
+    defaults = {
+        "memory": {"enabled": "true", "db_dir": '""', "tokenizer": '"unicode61"',
+                   "auto_update": "true", "default_scope": '"auto"', "search_limit": "8",
+                   "context_budget_tokens": "1200"},
+        "memory.ranking": {"prefer_wiki": "true", "fallback_to_notes": "true"},
+        "memory.semantic": {"enabled": "false", "provider": '"none"'},
+        "sources": {"enabled": "true", "registry_path": '""', "state_dir": '""',
+                    "check_interval": '"1d"', "timeout_seconds": "20", "max_response_bytes": "5242880"},
+    }
+    for table, entries in defaults.items():
+        parts = table.split(".")
+        if any(re.search(r"(?m)^\s*" + re.escape(part) + r"\s*=\s*\{", original) for part in parts):
+            continue
+        existing = parsed
+        found = True
+        for part in parts:
+            found = found and part in existing
+            existing = existing.get(part, {})
+        missing = {key: value for key, value in entries.items() if key not in existing}
+        if not missing:
+            continue
+        addition = newline.join(f"{key} = {value}" for key, value in missing.items()) + newline
+        header = re.search(r"(?m)^\[" + re.escape(table) + r"\][ \t]*(?:#[^\r\n]*)?(?:\r?\n|$)", text)
+        if header:
+            text = text[:header.end()] + ("" if header[0].endswith("\n") else newline) + addition + text[header.end():]
+        else:
+            # A parsed existing table with a different spelling may be inline or
+            # use dotted assignments. Leave it to runtime defaults instead.
+            if found:
+                continue
+            text += ("" if text.endswith("\n") else newline) + newline + f"[{table}]" + newline + addition
+    tomllib.loads(text)  # validate the proposed complete config before replacing it
+    if text == original:
         return "present"
-    if text and not text.endswith("\n"):
-        text += "\n"
-    config_path.write_text(text + MEMORY_SECTION, encoding="utf-8")
+    descriptor, temporary = tempfile.mkstemp(dir=config_path.parent, prefix="config-defaults-", suffix=".tmp")
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(text.encode("utf-8"))
+        os.chmod(temporary, config_path.stat().st_mode)
+        os.replace(temporary, config_path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
     return "added"
 
 
@@ -103,9 +147,13 @@ def main() -> int:
     config_path = PROJECT_ROOT / "config.toml"
 
     print("== Migrate: config ==")
-    state = ensure_memory_section(config_path)
+    try:
+        state = ensure_memory_section(config_path)
+    except (OSError, ValueError) as exc:
+        print(f"config: FAILED ({exc}); original config retained", file=sys.stderr)
+        return 1
     if state == "added":
-        print("config.toml: [memory] section added")
+        print("config.toml: missing memory/source defaults added")
     elif state == "present":
         print("config.toml: [memory] section already present")
     else:

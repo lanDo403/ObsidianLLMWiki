@@ -1,1 +1,1 @@
-# ObsidianDataWeave scripts package
+# ObsidianLLMWIKI scripts package

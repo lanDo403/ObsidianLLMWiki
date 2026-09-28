@@ -58,5 +58,9 @@ graphify-out/
 *.log
 .gstack/
 
+# Local validation output
+.validation/
+.pytest_cache/
+
 # Claude Code runtime state (contains personal filenames + paths)
 .claude/

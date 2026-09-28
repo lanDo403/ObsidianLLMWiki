@@ -49,12 +49,12 @@ PYEOF
 # Read rclone remote and staging dir from config (or use fallbacks)
 if [ ! -f "${LOCAL_CONFIG}" ]; then
     echo "WARNING: config.toml not found at ${LOCAL_CONFIG}" >&2
-    echo "WARNING: Using default remote 'gdrive:' and staging '/tmp/dw/staging'" >&2
+    echo "WARNING: Using default remote 'gdrive:' and staging '/tmp/obsidian-llmwiki/staging'" >&2
     RCLONE_REMOTE="gdrive:"
-    STAGING_DIR="/tmp/dw/staging"
+    STAGING_DIR="/tmp/obsidian-llmwiki/staging"
 else
     RCLONE_REMOTE="$(parse_config "rclone" "remote" "gdrive:")"
-    STAGING_DIR="$(parse_config "rclone" "staging_dir" "/tmp/dw/staging")"
+    STAGING_DIR="$(parse_config "rclone" "staging_dir" "/tmp/obsidian-llmwiki/staging")"
 fi
 
 # ── Staging directory setup ────────────────────────────────────────────────────
